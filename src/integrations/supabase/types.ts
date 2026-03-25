@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      cash_sessions: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          closing_amount: number | null
+          id: string
+          is_open: boolean
+          notes: string | null
+          opened_at: string
+          opened_by: string
+          opening_amount: number
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          closing_amount?: number | null
+          id?: string
+          is_open?: boolean
+          notes?: string | null
+          opened_at?: string
+          opened_by: string
+          opening_amount?: number
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          closing_amount?: number | null
+          id?: string
+          is_open?: boolean
+          notes?: string | null
+          opened_at?: string
+          opened_by?: string
+          opening_amount?: number
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
@@ -132,6 +168,57 @@ export type Database = {
             columns: ["table_id"]
             isOneToOne: false
             referencedRelation: "restaurant_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          cash_session_id: string | null
+          created_at: string
+          created_by: string
+          id: string
+          method: Database["public"]["Enums"]["payment_method"]
+          order_id: string
+          receipt_number: number
+          tip: number
+        }
+        Insert: {
+          amount: number
+          cash_session_id?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          method: Database["public"]["Enums"]["payment_method"]
+          order_id: string
+          receipt_number?: number
+          tip?: number
+        }
+        Update: {
+          amount?: number
+          cash_session_id?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          method?: Database["public"]["Enums"]["payment_method"]
+          order_id?: string
+          receipt_number?: number
+          tip?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -325,6 +412,12 @@ export type Database = {
         | "ready"
         | "served"
         | "cancelled"
+      payment_method:
+        | "efectivo"
+        | "debito"
+        | "credito"
+        | "transferencia"
+        | "cuenta_empresa"
       table_status: "available" | "occupied" | "reserved"
     }
     CompositeTypes: {
@@ -460,6 +553,13 @@ export const Constants = {
         "ready",
         "served",
         "cancelled",
+      ],
+      payment_method: [
+        "efectivo",
+        "debito",
+        "credito",
+        "transferencia",
+        "cuenta_empresa",
       ],
       table_status: ["available", "occupied", "reserved"],
     },
