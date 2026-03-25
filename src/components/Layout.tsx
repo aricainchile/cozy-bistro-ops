@@ -1,58 +1,54 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Users,
-  Grid3X3,
-  ShoppingBag,
-  ClipboardList,
-  DollarSign,
-  Package,
-  Printer,
-  Truck,
-  Star,
-  UserCog,
-  CreditCard,
-  BarChart3,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-  UtensilsCrossed,
+  LayoutDashboard, Users, Grid3X3, ShoppingBag, ClipboardList,
+  DollarSign, Package, Printer, Truck, Star, UserCog, CreditCard,
+  BarChart3, LogOut, ChevronLeft, ChevronRight, UtensilsCrossed,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { AppModule, roleDisplayName } from "@/lib/permissions";
 
-interface LayoutProps {
-  children: React.ReactNode;
+interface MenuItem {
+  icon: typeof LayoutDashboard;
+  label: string;
+  path: string;
+  module: AppModule;
 }
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Users, label: "Usuarios", path: "/usuarios" },
-  { icon: Grid3X3, label: "Mesas", path: "/mesas" },
-  { icon: ShoppingBag, label: "Productos", path: "/productos" },
-  { icon: ClipboardList, label: "Pedidos", path: "/pedidos" },
-  { icon: DollarSign, label: "Caja", path: "/caja" },
-  { icon: Package, label: "Inventario", path: "/inventario" },
-  { icon: Printer, label: "Impresión", path: "/impresion" },
-  { icon: Truck, label: "Delivery", path: "/delivery" },
-  { icon: Star, label: "Fidelización", path: "/fidelizacion" },
-  { icon: UserCog, label: "Personal", path: "/personal" },
-  { icon: CreditCard, label: "POS", path: "/pos" },
-  { icon: BarChart3, label: "Análisis", path: "/analisis" },
+const menuItems: MenuItem[] = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/", module: "dashboard" },
+  { icon: Users, label: "Usuarios", path: "/usuarios", module: "usuarios" },
+  { icon: Grid3X3, label: "Mesas", path: "/mesas", module: "mesas" },
+  { icon: ShoppingBag, label: "Productos", path: "/productos", module: "productos" },
+  { icon: ClipboardList, label: "Pedidos", path: "/pedidos", module: "pedidos" },
+  { icon: DollarSign, label: "Caja", path: "/caja", module: "caja" },
+  { icon: Package, label: "Inventario", path: "/inventario", module: "inventario" },
+  { icon: Printer, label: "Impresión", path: "/impresion", module: "impresion" },
+  { icon: Truck, label: "Delivery", path: "/delivery", module: "delivery" },
+  { icon: Star, label: "Fidelización", path: "/fidelizacion", module: "fidelizacion" },
+  { icon: UserCog, label: "Personal", path: "/personal", module: "personal" },
+  { icon: CreditCard, label: "POS", path: "/pos", module: "pos" },
+  { icon: BarChart3, label: "Análisis", path: "/analisis", module: "analisis" },
 ];
 
-const Layout = ({ children }: LayoutProps) => {
+const Layout = ({ children }: { children: React.ReactNode }) => {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { signOut, fullName, userRole, hasAccess } = useAuth();
+
+  const visibleItems = menuItems.filter((item) => hasAccess(item.module));
+  const displayRole = userRole ? roleDisplayName[userRole] : "";
+  const initials = fullName
+    ? fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : "U";
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
       <aside
         className={`sidebar-gradient border-r border-sidebar-border flex flex-col transition-all duration-300 ${
           collapsed ? "w-[70px]" : "w-[240px]"
         }`}
       >
-        {/* Logo */}
         <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border">
           <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center flex-shrink-0">
             <UtensilsCrossed className="w-5 h-5 text-primary-foreground" />
@@ -64,9 +60,8 @@ const Layout = ({ children }: LayoutProps) => {
           )}
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 py-3 px-2 overflow-y-auto space-y-1">
-          {menuItems.map((item) => {
+          {visibleItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Link
@@ -85,8 +80,14 @@ const Layout = ({ children }: LayoutProps) => {
           })}
         </nav>
 
-        {/* Collapse toggle */}
-        <div className="p-2 border-t border-sidebar-border">
+        <div className="p-2 border-t border-sidebar-border space-y-1">
+          <button
+            onClick={() => signOut()}
+            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0" />
+            {!collapsed && <span>Cerrar Sesión</span>}
+          </button>
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="flex items-center justify-center w-full py-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors"
@@ -96,28 +97,23 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 overflow-y-auto">
-        {/* Top bar */}
         <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
           <h2 className="font-display font-semibold text-lg text-foreground">
             {menuItems.find((i) => i.path === location.pathname)?.label || "Dashboard"}
           </h2>
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <p className="text-sm font-medium text-foreground">Admin</p>
-              <p className="text-xs text-muted-foreground">Administrador</p>
+              <p className="text-sm font-medium text-foreground">{fullName || "Usuario"}</p>
+              <p className="text-xs text-muted-foreground">{displayRole}</p>
             </div>
             <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
-              A
+              {initials}
             </div>
           </div>
         </header>
 
-        {/* Content */}
-        <div className="p-6 animate-fade-in">
-          {children}
-        </div>
+        <div className="p-6 animate-fade-in">{children}</div>
       </main>
     </div>
   );

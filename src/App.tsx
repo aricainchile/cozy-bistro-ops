@@ -1,9 +1,9 @@
-import { useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -20,56 +20,64 @@ import Staff from "./pages/Staff";
 import POS from "./pages/POS";
 import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
+import { AppModule } from "@/lib/permissions";
+import { ReactNode } from "react";
 
 const queryClient = new QueryClient();
 
-const App = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState("");
+const ProtectedRoute = ({ module, children }: { module: AppModule; children: ReactNode }) => {
+  const { hasAccess } = useAuth();
+  if (!hasAccess(module)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
 
-  const handleLogin = (role: string) => {
-    setUserRole(role);
-    setIsLoggedIn(true);
-  };
+const AppRoutes = () => {
+  const { session, loading } = useAuth();
 
-  if (!isLoggedIn) {
+  if (loading) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Login onLogin={handleLogin} />
-        </TooltipProvider>
-      </QueryClientProvider>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
     );
   }
 
+  if (!session) return <Login />;
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/usuarios" element={<UsersPage />} />
-              <Route path="/mesas" element={<Tables />} />
-              <Route path="/productos" element={<Products />} />
-              <Route path="/pedidos" element={<Orders />} />
-              <Route path="/caja" element={<CashRegister />} />
-              <Route path="/inventario" element={<Inventory />} />
-              <Route path="/impresion" element={<Printing />} />
-              <Route path="/delivery" element={<Delivery />} />
-              <Route path="/fidelizacion" element={<Loyalty />} />
-              <Route path="/personal" element={<Staff />} />
-              <Route path="/pos" element={<POS />} />
-              <Route path="/analisis" element={<Analytics />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Layout>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <BrowserRouter>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/usuarios" element={<ProtectedRoute module="usuarios"><UsersPage /></ProtectedRoute>} />
+          <Route path="/mesas" element={<ProtectedRoute module="mesas"><Tables /></ProtectedRoute>} />
+          <Route path="/productos" element={<ProtectedRoute module="productos"><Products /></ProtectedRoute>} />
+          <Route path="/pedidos" element={<ProtectedRoute module="pedidos"><Orders /></ProtectedRoute>} />
+          <Route path="/caja" element={<ProtectedRoute module="caja"><CashRegister /></ProtectedRoute>} />
+          <Route path="/inventario" element={<ProtectedRoute module="inventario"><Inventory /></ProtectedRoute>} />
+          <Route path="/impresion" element={<ProtectedRoute module="impresion"><Printing /></ProtectedRoute>} />
+          <Route path="/delivery" element={<ProtectedRoute module="delivery"><Delivery /></ProtectedRoute>} />
+          <Route path="/fidelizacion" element={<ProtectedRoute module="fidelizacion"><Loyalty /></ProtectedRoute>} />
+          <Route path="/personal" element={<ProtectedRoute module="personal"><Staff /></ProtectedRoute>} />
+          <Route path="/pos" element={<ProtectedRoute module="pos"><POS /></ProtectedRoute>} />
+          <Route path="/analisis" element={<ProtectedRoute module="analisis"><Analytics /></ProtectedRoute>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Layout>
+    </BrowserRouter>
   );
 };
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
 export default App;
