@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      restaurant_tables: {
+        Row: {
+          created_at: string
+          guests: number | null
+          id: string
+          seats: number
+          status: Database["public"]["Enums"]["table_status"]
+          table_number: number
+          updated_at: string
+          waiter_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          guests?: number | null
+          id?: string
+          seats?: number
+          status?: Database["public"]["Enums"]["table_status"]
+          table_number: number
+          updated_at?: string
+          waiter_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          guests?: number | null
+          id?: string
+          seats?: number
+          status?: Database["public"]["Enums"]["table_status"]
+          table_number?: number
+          updated_at?: string
+          waiter_name?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -75,6 +108,7 @@ export type Database = {
     }
     Enums: {
       app_role: "garzon" | "jefe_local" | "admin"
+      table_status: "available" | "occupied" | "reserved"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -203,6 +237,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["garzon", "jefe_local", "admin"],
+      table_status: ["available", "occupied", "reserved"],
     },
   },
 } as const
