@@ -74,6 +74,85 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_items: {
+        Row: {
+          created_at: string
+          current_stock: number
+          id: string
+          min_stock: number
+          product_id: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_stock?: number
+          id?: string
+          min_stock?: number
+          product_id: string
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_stock?: number
+          id?: string
+          min_stock?: number
+          product_id?: string
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_movements: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          inventory_item_id: string
+          invoice_number: string | null
+          quantity: number
+          reason: string | null
+          type: Database["public"]["Enums"]["movement_type"]
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          inventory_item_id: string
+          invoice_number?: string | null
+          quantity: number
+          reason?: string | null
+          type: Database["public"]["Enums"]["movement_type"]
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          inventory_item_id?: string
+          invoice_number?: string | null
+          quantity?: number
+          reason?: string | null
+          type?: Database["public"]["Enums"]["movement_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
@@ -406,6 +485,7 @@ export type Database = {
     }
     Enums: {
       app_role: "garzon" | "jefe_local" | "admin"
+      movement_type: "entrada" | "salida" | "ajuste" | "venta"
       order_status:
         | "pending"
         | "in_preparation"
@@ -547,6 +627,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["garzon", "jefe_local", "admin"],
+      movement_type: ["entrada", "salida", "ajuste", "venta"],
       order_status: [
         "pending",
         "in_preparation",
