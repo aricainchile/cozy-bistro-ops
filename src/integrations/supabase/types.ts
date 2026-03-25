@@ -38,6 +38,104 @@ export type Database = {
         }
         Relationships: []
       }
+      order_items: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          order_id: string
+          product_id: string
+          product_name: string
+          quantity: number
+          subtotal: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          order_id: string
+          product_id: string
+          product_name: string
+          quantity?: number
+          subtotal?: number
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          order_id?: string
+          product_id?: string
+          product_name?: string
+          quantity?: number
+          subtotal?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string
+          created_by: string
+          guests: number
+          id: string
+          notes: string | null
+          order_number: number
+          status: Database["public"]["Enums"]["order_status"]
+          table_id: string | null
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          guests?: number
+          id?: string
+          notes?: string | null
+          order_number?: number
+          status?: Database["public"]["Enums"]["order_status"]
+          table_id?: string | null
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          guests?: number
+          id?: string
+          notes?: string | null
+          order_number?: number
+          status?: Database["public"]["Enums"]["order_status"]
+          table_id?: string | null
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "restaurant_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           active: boolean
@@ -221,6 +319,12 @@ export type Database = {
     }
     Enums: {
       app_role: "garzon" | "jefe_local" | "admin"
+      order_status:
+        | "pending"
+        | "in_preparation"
+        | "ready"
+        | "served"
+        | "cancelled"
       table_status: "available" | "occupied" | "reserved"
     }
     CompositeTypes: {
@@ -350,6 +454,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["garzon", "jefe_local", "admin"],
+      order_status: [
+        "pending",
+        "in_preparation",
+        "ready",
+        "served",
+        "cancelled",
+      ],
       table_status: ["available", "occupied", "reserved"],
     },
   },
