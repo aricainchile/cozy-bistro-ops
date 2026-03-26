@@ -272,6 +272,7 @@ const Dashboard = () => {
     fetchRecentOrders();
     fetchPopularProducts();
     fetchHourlySales();
+    fetchCategorySales();
 
     const channel = supabase
       .channel("dashboard-realtime")
@@ -279,7 +280,7 @@ const Dashboard = () => {
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => { fetchStats(); fetchRecentOrders(); fetchPopularProducts(); fetchHourlySales(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => { fetchStats(); fetchHourlySales(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => fetchStats())
-      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => { fetchRecentOrders(); fetchPopularProducts(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => { fetchRecentOrders(); fetchPopularProducts(); fetchCategorySales(); })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -415,9 +416,58 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Popular items */}
+        {/* Category Sales Chart */}
         <div className="glass-card p-5">
-          <h3 className="font-display font-semibold text-foreground mb-4">Productos Populares</h3>
+          <h3 className="font-display font-semibold text-foreground mb-4">Ventas por Categoría</h3>
+          {categorySales.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Sin datos hoy</p>
+          ) : (
+            <>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categorySales}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={45}
+                      outerRadius={75}
+                      paddingAngle={3}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {categorySales.map((_, i) => (
+                        <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, color: "hsl(var(--foreground))" }}
+                      formatter={(value: number) => [formatCLP(value), "Ventas"]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-2 mt-2">
+                {categorySales.map((cat, i) => {
+                  const total = categorySales.reduce((s, c) => s + c.value, 0);
+                  const pct = total > 0 ? ((cat.value / total) * 100).toFixed(0) : "0";
+                  return (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />
+                        <span className="text-xs text-foreground">{cat.name}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{pct}% · {formatCLP(cat.value)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {popularProducts.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">Sin ventas hoy</p>
           ) : (
