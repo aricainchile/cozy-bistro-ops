@@ -203,6 +203,130 @@ export type Database = {
           },
         ]
       }
+      loyalty_customers: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          last_visit_at: string
+          name: string
+          phone: string
+          points: number
+          tier: string
+          total_spent: number
+          total_visits: number
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          last_visit_at?: string
+          name: string
+          phone?: string
+          points?: number
+          tier?: string
+          total_spent?: number
+          total_visits?: number
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          last_visit_at?: string
+          name?: string
+          phone?: string
+          points?: number
+          tier?: string
+          total_spent?: number
+          total_visits?: number
+        }
+        Relationships: []
+      }
+      loyalty_rewards: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          points_cost: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          points_cost?: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          points_cost?: number
+        }
+        Relationships: []
+      }
+      loyalty_transactions: {
+        Row: {
+          created_at: string
+          created_by: string
+          customer_id: string
+          description: string | null
+          id: string
+          order_id: string | null
+          points: number
+          reward_id: string | null
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          customer_id: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          points?: number
+          reward_id?: string | null
+          type?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          customer_id?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          points?: number
+          reward_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_transactions_reward_id_fkey"
+            columns: ["reward_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_rewards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
