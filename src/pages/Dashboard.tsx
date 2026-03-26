@@ -3,10 +3,8 @@ import {
   ClipboardList,
   DollarSign,
   Grid3X3,
-  TrendingUp,
   Users,
   Package,
-  ShoppingBag,
   ArrowUpRight,
   ArrowDownRight,
   AlertTriangle,
@@ -21,31 +19,137 @@ interface InventoryAlert {
   unit: string;
 }
 
-const stats = [
-  { label: "Ventas Hoy", value: "$1.245.000", change: "+12%", up: true, icon: DollarSign, color: "text-success" },
-  { label: "Pedidos Activos", value: "18", change: "+3", up: true, icon: ClipboardList, color: "text-info" },
-  { label: "Mesas Ocupadas", value: "12/20", change: "60%", up: false, icon: Grid3X3, color: "text-primary" },
-  { label: "Clientes Hoy", value: "87", change: "+8%", up: true, icon: Users, color: "text-accent" },
-];
+interface DashboardStats {
+  salesToday: number;
+  activeOrders: number;
+  occupiedTables: number;
+  totalTables: number;
+  guestsToday: number;
+}
 
-const recentOrders = [
-  { id: "#001", table: "Mesa 5", items: 4, total: "$45.000", status: "En cocina", time: "12:30" },
-  { id: "#002", table: "Mesa 3", items: 2, total: "$28.000", status: "Servido", time: "12:25" },
-  { id: "#003", table: "Mesa 8", items: 6, total: "$72.000", status: "En preparación", time: "12:20" },
-  { id: "#004", table: "Mesa 1", items: 3, total: "$35.000", status: "Pendiente", time: "12:15" },
-  { id: "#005", table: "Delivery", items: 2, total: "$22.000", status: "En camino", time: "12:10" },
-];
+interface RecentOrder {
+  id: string;
+  order_number: number;
+  table_number: number | null;
+  table_label: string;
+  items_count: number;
+  total: number;
+  status: string;
+  time: string;
+}
+
+interface PopularProduct {
+  name: string;
+  category: string;
+  sales: number;
+}
+
+const orderStatusMap: Record<string, string> = {
+  pending: "Pendiente",
+  in_preparation: "En preparación",
+  ready: "Listo",
+  served: "Servido",
+  cancelled: "Cancelado",
+};
 
 const statusColors: Record<string, string> = {
-  "En cocina": "bg-warning/20 text-warning",
+  "En preparación": "bg-warning/20 text-warning",
   "Servido": "bg-success/20 text-success",
-  "En preparación": "bg-info/20 text-info",
+  "Listo": "bg-info/20 text-info",
   "Pendiente": "bg-muted text-muted-foreground",
-  "En camino": "bg-primary/20 text-primary",
+  "Cancelado": "bg-destructive/20 text-destructive",
 };
+
+const formatCLP = (n: number) =>
+  "$" + n.toLocaleString("es-CL");
 
 const Dashboard = () => {
   const [lowStockItems, setLowStockItems] = useState<InventoryAlert[]>([]);
+  const [stats, setStats] = useState<DashboardStats>({ salesToday: 0, activeOrders: 0, occupiedTables: 0, totalTables: 0, guestsToday: 0 });
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [popularProducts, setPopularProducts] = useState<PopularProduct[]>([]);
+
+  const fetchStats = async () => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayISO = todayStart.toISOString();
+
+    const [paymentsRes, ordersRes, tablesRes] = await Promise.all([
+      supabase.from("payments").select("amount").gte("created_at", todayISO),
+      supabase.from("orders").select("id, guests, status").gte("created_at", todayISO),
+      supabase.from("restaurant_tables").select("id, status"),
+    ]);
+
+    const salesToday = (paymentsRes.data || []).reduce((s, p) => s + p.amount, 0);
+    const allOrders = ordersRes.data || [];
+    const activeOrders = allOrders.filter((o) => o.status !== "served" && o.status !== "cancelled").length;
+    const guestsToday = allOrders.reduce((s, o) => s + (o.guests || 0), 0);
+    const allTables = tablesRes.data || [];
+    const occupiedTables = allTables.filter((t) => t.status === "occupied").length;
+
+    setStats({ salesToday, activeOrders, occupiedTables, totalTables: allTables.length, guestsToday });
+  };
+
+  const fetchRecentOrders = async () => {
+    const { data: orders } = await supabase
+      .from("orders")
+      .select("id, order_number, table_id, total, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (!orders || orders.length === 0) { setRecentOrders([]); return; }
+
+    const tableIds = orders.map((o) => o.table_id).filter(Boolean) as string[];
+    const { data: tables } = tableIds.length > 0
+      ? await supabase.from("restaurant_tables").select("id, table_number").in("id", tableIds)
+      : { data: [] };
+
+    const tableMap = new Map((tables || []).map((t: any) => [t.id, t.table_number]));
+
+    const orderIds = orders.map((o) => o.id);
+    const { data: items } = await supabase.from("order_items").select("order_id").in("order_id", orderIds);
+    const countMap = new Map<string, number>();
+    (items || []).forEach((i: any) => countMap.set(i.order_id, (countMap.get(i.order_id) || 0) + 1));
+
+    setRecentOrders(
+      orders.map((o) => {
+        const tn = o.table_id ? tableMap.get(o.table_id) : null;
+        const created = new Date(o.created_at);
+        return {
+          id: o.id,
+          order_number: o.order_number,
+          table_number: tn ?? null,
+          table_label: tn ? `Mesa ${tn}` : "Delivery",
+          items_count: countMap.get(o.id) || 0,
+          total: o.total,
+          status: orderStatusMap[o.status] || o.status,
+          time: `${created.getHours().toString().padStart(2, "0")}:${created.getMinutes().toString().padStart(2, "0")}`,
+        };
+      })
+    );
+  };
+
+  const fetchPopularProducts = async () => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { data: items } = await supabase
+      .from("order_items")
+      .select("product_id, product_name, quantity")
+      .gte("created_at", todayStart.toISOString());
+
+    if (!items || items.length === 0) { setPopularProducts([]); return; }
+
+    const salesMap = new Map<string, { name: string; sales: number }>();
+    items.forEach((i: any) => {
+      const cur = salesMap.get(i.product_id) || { name: i.product_name, sales: 0 };
+      cur.sales += i.quantity;
+      salesMap.set(i.product_id, cur);
+    });
+
+    const sorted = Array.from(salesMap.values()).sort((a, b) => b.sales - a.sales).slice(0, 5);
+    setPopularProducts(sorted.map((p) => ({ name: p.name, category: "", sales: p.sales })));
+  };
 
   useEffect(() => {
     const fetchLowStock = async () => {
@@ -77,14 +181,28 @@ const Dashboard = () => {
     };
 
     fetchLowStock();
+    fetchStats();
+    fetchRecentOrders();
+    fetchPopularProducts();
 
     const channel = supabase
-      .channel("dashboard-inventory")
+      .channel("dashboard-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, () => fetchLowStock())
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => { fetchStats(); fetchRecentOrders(); fetchPopularProducts(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => fetchStats())
+      .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => fetchStats())
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => { fetchRecentOrders(); fetchPopularProducts(); })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  const statCards = [
+    { label: "Ventas Hoy", value: formatCLP(stats.salesToday), icon: DollarSign, color: "text-success", up: stats.salesToday > 0 },
+    { label: "Pedidos Activos", value: String(stats.activeOrders), icon: ClipboardList, color: "text-info", up: stats.activeOrders > 0 },
+    { label: "Mesas Ocupadas", value: `${stats.occupiedTables}/${stats.totalTables}`, icon: Grid3X3, color: "text-primary", up: false },
+    { label: "Comensales Hoy", value: String(stats.guestsToday), icon: Users, color: "text-accent", up: stats.guestsToday > 0 },
+  ];
 
   return (
     <div className="space-y-6">
@@ -115,16 +233,17 @@ const Dashboard = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
+        {statCards.map((stat) => (
           <div key={stat.label} className="glass-card-hover p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
                 <stat.icon className={`w-5 h-5 ${stat.color}`} />
               </div>
-              <div className={`flex items-center gap-1 text-xs font-medium ${stat.up ? "text-success" : "text-muted-foreground"}`}>
-                {stat.up ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                {stat.change}
-              </div>
+              {stat.up && (
+                <div className="flex items-center gap-1 text-xs font-medium text-success">
+                  <ArrowUpRight className="w-3 h-3" />
+                </div>
+              )}
             </div>
             <p className="text-2xl font-display font-bold text-foreground">{stat.value}</p>
             <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
@@ -139,52 +258,51 @@ const Dashboard = () => {
             <h3 className="font-display font-semibold text-foreground">Pedidos Recientes</h3>
             <span className="text-xs text-muted-foreground">Últimos 5</span>
           </div>
-          <div className="space-y-3">
-            {recentOrders.map((order) => (
-              <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-mono text-primary font-semibold">{order.id}</span>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{order.table}</p>
-                    <p className="text-xs text-muted-foreground">{order.items} items · {order.time}</p>
+          {recentOrders.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Sin pedidos hoy</p>
+          ) : (
+            <div className="space-y-3">
+              {recentOrders.map((order) => (
+                <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-mono text-primary font-semibold">#{order.order_number}</span>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{order.table_label}</p>
+                      <p className="text-xs text-muted-foreground">{order.items_count} items · {order.time}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[order.status] || "bg-muted text-muted-foreground"}`}>
+                      {order.status}
+                    </span>
+                    <span className="text-sm font-semibold text-foreground">{formatCLP(order.total)}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[order.status]}`}>
-                    {order.status}
-                  </span>
-                  <span className="text-sm font-semibold text-foreground">{order.total}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Popular items */}
         <div className="glass-card p-5">
           <h3 className="font-display font-semibold text-foreground mb-4">Productos Populares</h3>
-          <div className="space-y-3">
-            {[
-              { name: "Lomo a lo Pobre", sales: 24, category: "Carne" },
-              { name: "Pisco Sour", sales: 18, category: "Cocktail" },
-              { name: "Pollo Asado", sales: 15, category: "Pollo" },
-              { name: "Pulpo al Olivo", sales: 12, category: "Pulpo" },
-              { name: "Cerveza Artesanal", sales: 30, category: "Cervezas" },
-            ].map((item, i) => (
-              <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                    {i + 1}
-                  </span>
-                  <div>
+          {popularProducts.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Sin ventas hoy</p>
+          ) : (
+            <div className="space-y-3">
+              {popularProducts.map((item, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                      {i + 1}
+                    </span>
                     <p className="text-sm font-medium text-foreground">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">{item.category}</p>
                   </div>
+                  <span className="text-sm text-muted-foreground">{item.sales} ventas</span>
                 </div>
-                <span className="text-sm text-muted-foreground">{item.sales} ventas</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
