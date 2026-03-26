@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   ClipboardList,
   DollarSign,
@@ -8,9 +8,16 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   AlertTriangle,
+  CalendarIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface InventoryAlert {
   id: string;
@@ -64,6 +71,38 @@ const statusColors: Record<string, string> = {
 const formatCLP = (n: number) =>
   "$" + n.toLocaleString("es-CL");
 
+type DatePreset = "hoy" | "ayer" | "7dias" | "30dias" | "custom";
+
+const getPresetRange = (preset: DatePreset): { from: Date; to: Date } => {
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  switch (preset) {
+    case "ayer": {
+      const yesterday = new Date(todayStart);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayEnd = new Date(yesterday);
+      yesterdayEnd.setHours(23, 59, 59, 999);
+      return { from: yesterday, to: yesterdayEnd };
+    }
+    case "7dias": {
+      const weekAgo = new Date(todayStart);
+      weekAgo.setDate(weekAgo.getDate() - 6);
+      return { from: weekAgo, to: todayEnd };
+    }
+    case "30dias": {
+      const monthAgo = new Date(todayStart);
+      monthAgo.setDate(monthAgo.getDate() - 29);
+      return { from: monthAgo, to: todayEnd };
+    }
+    default:
+      return { from: todayStart, to: todayEnd };
+  }
+};
+
 const Dashboard = () => {
   const [lowStockItems, setLowStockItems] = useState<InventoryAlert[]>([]);
   const [stats, setStats] = useState<DashboardStats>({ salesToday: 0, activeOrders: 0, occupiedTables: 0, totalTables: 0, guestsToday: 0 });
@@ -71,6 +110,10 @@ const Dashboard = () => {
   const [popularProducts, setPopularProducts] = useState<PopularProduct[]>([]);
   const [hourlySales, setHourlySales] = useState<{ hora: string; ventas: number; pedidos: number }[]>([]);
   const [categorySales, setCategorySales] = useState<{ name: string; value: number }[]>([]);
+
+  const [activePreset, setActivePreset] = useState<DatePreset>("hoy");
+  const [dateFrom, setDateFrom] = useState<Date>(() => getPresetRange("hoy").from);
+  const [dateTo, setDateTo] = useState<Date>(() => getPresetRange("hoy").to);
 
   const CATEGORY_COLORS = [
     "hsl(var(--primary))",
@@ -83,14 +126,50 @@ const Dashboard = () => {
     "hsl(280 60% 55%)",
   ];
 
-  const fetchCategorySales = async () => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+  const isToday = activePreset === "hoy";
+  const isSingleDay = dateFrom.toDateString() === dateTo.toDateString();
 
+  const handlePreset = (preset: DatePreset) => {
+    if (preset === "custom") return;
+    const range = getPresetRange(preset);
+    setActivePreset(preset);
+    setDateFrom(range.from);
+    setDateTo(range.to);
+  };
+
+  const handleCustomFrom = (date: Date | undefined) => {
+    if (!date) return;
+    date.setHours(0, 0, 0, 0);
+    setActivePreset("custom");
+    setDateFrom(date);
+    if (date > dateTo) {
+      const newTo = new Date(date);
+      newTo.setHours(23, 59, 59, 999);
+      setDateTo(newTo);
+    }
+  };
+
+  const handleCustomTo = (date: Date | undefined) => {
+    if (!date) return;
+    date.setHours(23, 59, 59, 999);
+    setActivePreset("custom");
+    setDateTo(date);
+    if (date < dateFrom) {
+      const newFrom = new Date(date);
+      newFrom.setHours(0, 0, 0, 0);
+      setDateFrom(newFrom);
+    }
+  };
+
+  const fromISO = dateFrom.toISOString();
+  const toISO = dateTo.toISOString();
+
+  const fetchCategorySales = useCallback(async () => {
     const { data: items } = await supabase
       .from("order_items")
       .select("product_id, quantity, subtotal")
-      .gte("created_at", todayStart.toISOString());
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO);
 
     if (!items || items.length === 0) { setCategorySales([]); return; }
 
@@ -119,51 +198,72 @@ const Dashboard = () => {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
     setCategorySales(sorted);
-  };
+  }, [fromISO, toISO]);
 
-  const fetchHourlySales = async () => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+  const fetchHourlySales = useCallback(async () => {
     const { data: payments } = await supabase
       .from("payments")
       .select("amount, created_at")
-      .gte("created_at", todayStart.toISOString());
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO);
 
     const { data: orders } = await supabase
       .from("orders")
       .select("id, created_at")
-      .gte("created_at", todayStart.toISOString());
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO);
 
-    const now = new Date();
-    const currentHour = now.getHours();
-    const startHour = Math.max(8, Math.min(...(payments || []).map(p => new Date(p.created_at).getHours()), ...(orders || []).map(o => new Date(o.created_at).getHours()), currentHour));
-    
-    const hourlyData: { hora: string; ventas: number; pedidos: number }[] = [];
-    for (let h = startHour; h <= Math.min(currentHour, 23); h++) {
-      const label = `${h.toString().padStart(2, "0")}:00`;
-      const salesInHour = (payments || [])
-        .filter(p => new Date(p.created_at).getHours() === h)
-        .reduce((s, p) => s + p.amount, 0);
-      const ordersInHour = (orders || [])
-        .filter(o => new Date(o.created_at).getHours() === h).length;
-      hourlyData.push({ hora: label, ventas: salesInHour, pedidos: ordersInHour });
-    }
-    if (hourlyData.length === 0) {
-      for (let h = 8; h <= 23; h++) {
-        hourlyData.push({ hora: `${h.toString().padStart(2, "0")}:00`, ventas: 0, pedidos: 0 });
+    if (isSingleDay) {
+      const now = new Date();
+      const currentHour = isToday ? now.getHours() : 23;
+      const startHour = Math.max(8, Math.min(
+        ...(payments || []).map(p => new Date(p.created_at).getHours()),
+        ...(orders || []).map(o => new Date(o.created_at).getHours()),
+        currentHour
+      ));
+
+      const hourlyData: { hora: string; ventas: number; pedidos: number }[] = [];
+      for (let h = startHour; h <= Math.min(currentHour, 23); h++) {
+        const label = `${h.toString().padStart(2, "0")}:00`;
+        const salesInHour = (payments || [])
+          .filter(p => new Date(p.created_at).getHours() === h)
+          .reduce((s, p) => s + p.amount, 0);
+        const ordersInHour = (orders || [])
+          .filter(o => new Date(o.created_at).getHours() === h).length;
+        hourlyData.push({ hora: label, ventas: salesInHour, pedidos: ordersInHour });
       }
+      if (hourlyData.length === 0) {
+        for (let h = 8; h <= 23; h++) {
+          hourlyData.push({ hora: `${h.toString().padStart(2, "0")}:00`, ventas: 0, pedidos: 0 });
+        }
+      }
+      setHourlySales(hourlyData);
+    } else {
+      // Multi-day: group by date
+      const dailyMap = new Map<string, { ventas: number; pedidos: number }>();
+      const d = new Date(dateFrom);
+      while (d <= dateTo) {
+        dailyMap.set(format(d, "dd/MM"), { ventas: 0, pedidos: 0 });
+        d.setDate(d.getDate() + 1);
+      }
+      (payments || []).forEach(p => {
+        const key = format(new Date(p.created_at), "dd/MM");
+        const cur = dailyMap.get(key);
+        if (cur) cur.ventas += p.amount;
+      });
+      (orders || []).forEach(o => {
+        const key = format(new Date(o.created_at), "dd/MM");
+        const cur = dailyMap.get(key);
+        if (cur) cur.pedidos += 1;
+      });
+      setHourlySales(Array.from(dailyMap.entries()).map(([hora, v]) => ({ hora, ...v })));
     }
-    setHourlySales(hourlyData);
-  };
+  }, [fromISO, toISO, isSingleDay, isToday, dateFrom, dateTo]);
 
-  const fetchStats = async () => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayISO = todayStart.toISOString();
-
+  const fetchStats = useCallback(async () => {
     const [paymentsRes, ordersRes, tablesRes] = await Promise.all([
-      supabase.from("payments").select("amount").gte("created_at", todayISO),
-      supabase.from("orders").select("id, guests, status").gte("created_at", todayISO),
+      supabase.from("payments").select("amount").gte("created_at", fromISO).lte("created_at", toISO),
+      supabase.from("orders").select("id, guests, status").gte("created_at", fromISO).lte("created_at", toISO),
       supabase.from("restaurant_tables").select("id, status"),
     ]);
 
@@ -175,12 +275,14 @@ const Dashboard = () => {
     const occupiedTables = allTables.filter((t) => t.status === "occupied").length;
 
     setStats({ salesToday, activeOrders, occupiedTables, totalTables: allTables.length, guestsToday });
-  };
+  }, [fromISO, toISO]);
 
-  const fetchRecentOrders = async () => {
+  const fetchRecentOrders = useCallback(async () => {
     const { data: orders } = await supabase
       .from("orders")
       .select("id, order_number, table_id, total, status, created_at")
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO)
       .order("created_at", { ascending: false })
       .limit(5);
 
@@ -214,16 +316,14 @@ const Dashboard = () => {
         };
       })
     );
-  };
+  }, [fromISO, toISO]);
 
-  const fetchPopularProducts = async () => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
+  const fetchPopularProducts = useCallback(async () => {
     const { data: items } = await supabase
       .from("order_items")
       .select("product_id, product_name, quantity")
-      .gte("created_at", todayStart.toISOString());
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO);
 
     if (!items || items.length === 0) { setPopularProducts([]); return; }
 
@@ -236,7 +336,7 @@ const Dashboard = () => {
 
     const sorted = Array.from(salesMap.values()).sort((a, b) => b.sales - a.sales).slice(0, 5);
     setPopularProducts(sorted.map((p) => ({ name: p.name, category: "", sales: p.sales })));
-  };
+  }, [fromISO, toISO]);
 
   useEffect(() => {
     const fetchLowStock = async () => {
@@ -268,15 +368,30 @@ const Dashboard = () => {
     };
 
     fetchLowStock();
+
+    const channel = supabase
+      .channel("dashboard-inventory")
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, () => fetchLowStock())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  // Refetch data when date range changes
+  useEffect(() => {
     fetchStats();
     fetchRecentOrders();
     fetchPopularProducts();
     fetchHourlySales();
     fetchCategorySales();
+  }, [fetchStats, fetchRecentOrders, fetchPopularProducts, fetchHourlySales, fetchCategorySales]);
+
+  // Realtime updates (only meaningful for "hoy")
+  useEffect(() => {
+    if (!isToday) return;
 
     const channel = supabase
       .channel("dashboard-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, () => fetchLowStock())
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => { fetchStats(); fetchRecentOrders(); fetchPopularProducts(); fetchHourlySales(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => { fetchStats(); fetchHourlySales(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => fetchStats())
@@ -284,17 +399,78 @@ const Dashboard = () => {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [isToday, fetchStats, fetchRecentOrders, fetchPopularProducts, fetchHourlySales, fetchCategorySales]);
+
+  const periodLabel = activePreset === "hoy" ? "Hoy" : activePreset === "ayer" ? "Ayer"
+    : activePreset === "7dias" ? "Últimos 7 días" : activePreset === "30dias" ? "Últimos 30 días"
+    : `${format(dateFrom, "dd/MM")} – ${format(dateTo, "dd/MM")}`;
 
   const statCards = [
-    { label: "Ventas Hoy", value: formatCLP(stats.salesToday), icon: DollarSign, color: "text-success", up: stats.salesToday > 0 },
+    { label: "Ventas", value: formatCLP(stats.salesToday), icon: DollarSign, color: "text-success", up: stats.salesToday > 0 },
     { label: "Pedidos Activos", value: String(stats.activeOrders), icon: ClipboardList, color: "text-info", up: stats.activeOrders > 0 },
     { label: "Mesas Ocupadas", value: `${stats.occupiedTables}/${stats.totalTables}`, icon: Grid3X3, color: "text-primary", up: false },
-    { label: "Comensales Hoy", value: String(stats.guestsToday), icon: Users, color: "text-accent", up: stats.guestsToday > 0 },
+    { label: "Comensales", value: String(stats.guestsToday), icon: Users, color: "text-accent", up: stats.guestsToday > 0 },
   ];
 
   return (
     <div className="space-y-6">
+      {/* Date Range Filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(["hoy", "ayer", "7dias", "30dias"] as DatePreset[]).map((preset) => {
+          const labels: Record<string, string> = { hoy: "Hoy", ayer: "Ayer", "7dias": "7 días", "30dias": "30 días" };
+          return (
+            <Button
+              key={preset}
+              variant={activePreset === preset ? "default" : "outline"}
+              size="sm"
+              onClick={() => handlePreset(preset)}
+              className="text-xs"
+            >
+              {labels[preset]}
+            </Button>
+          );
+        })}
+        <div className="flex items-center gap-1 ml-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant={activePreset === "custom" ? "default" : "outline"} size="sm" className="text-xs gap-1.5">
+                <CalendarIcon className="w-3.5 h-3.5" />
+                {format(dateFrom, "dd MMM", { locale: es })}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={dateFrom}
+                onSelect={handleCustomFrom}
+                disabled={(d) => d > new Date()}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          <span className="text-xs text-muted-foreground">—</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant={activePreset === "custom" ? "default" : "outline"} size="sm" className="text-xs gap-1.5">
+                <CalendarIcon className="w-3.5 h-3.5" />
+                {format(dateTo, "dd MMM", { locale: es })}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={dateTo}
+                onSelect={handleCustomTo}
+                disabled={(d) => d > new Date()}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
       {/* Low stock alert */}
       {lowStockItems.length > 0 && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
@@ -340,11 +516,13 @@ const Dashboard = () => {
         ))}
       </div>
 
-      {/* Hourly Sales Chart */}
+      {/* Sales Chart */}
       <div className="glass-card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-display font-semibold text-foreground">Ventas por Hora</h3>
-          <span className="text-xs text-muted-foreground">Hoy</span>
+          <h3 className="font-display font-semibold text-foreground">
+            {isSingleDay ? "Ventas por Hora" : "Ventas por Día"}
+          </h3>
+          <span className="text-xs text-muted-foreground">{periodLabel}</span>
         </div>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -392,7 +570,7 @@ const Dashboard = () => {
             <span className="text-xs text-muted-foreground">Últimos 5</span>
           </div>
           {recentOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Sin pedidos hoy</p>
+            <p className="text-sm text-muted-foreground text-center py-8">Sin pedidos en este periodo</p>
           ) : (
             <div className="space-y-3">
               {recentOrders.map((order) => (
@@ -420,7 +598,7 @@ const Dashboard = () => {
         <div className="glass-card p-5">
           <h3 className="font-display font-semibold text-foreground mb-4">Ventas por Categoría</h3>
           {categorySales.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Sin datos hoy</p>
+            <p className="text-sm text-muted-foreground text-center py-8">Sin datos en este periodo</p>
           ) : (
             <>
               <div className="h-48">
@@ -471,7 +649,7 @@ const Dashboard = () => {
         <div className="lg:col-span-3 glass-card p-5">
           <h3 className="font-display font-semibold text-foreground mb-4">Productos Populares</h3>
           {popularProducts.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Sin ventas hoy</p>
+            <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este periodo</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {popularProducts.map((item, i) => (
