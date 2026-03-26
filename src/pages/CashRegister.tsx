@@ -611,6 +611,55 @@ const CashRegister = () => {
               <Label>Propina ($)</Label>
               <Input type="number" value={paymentTip} onChange={(e) => setPaymentTip(e.target.value)} />
             </div>
+            {/* Loyalty customer selector */}
+            <div>
+              <Label className="flex items-center gap-1"><Star className="w-3.5 h-3.5 text-primary" /> Cliente Fidelizado (opcional)</Label>
+              {selectedLoyaltyCustomer ? (
+                <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20 mt-1">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{selectedLoyaltyCustomer.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedLoyaltyCustomer.tier} · {selectedLoyaltyCustomer.points} pts · Ganará +{Math.floor((parseInt(paymentAmount) || 0) / 1000) * POINTS_PER_1000} pts
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => { setSelectedLoyaltyCustomer(null); setLoyaltySearch(""); }}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-1 space-y-1">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nombre o teléfono..."
+                      value={loyaltySearch}
+                      onChange={(e) => setLoyaltySearch(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                  {loyaltySearch.length >= 2 && (
+                    <div className="max-h-32 overflow-y-auto rounded-lg border border-border bg-background">
+                      {loyaltyCustomers
+                        .filter(c => c.name.toLowerCase().includes(loyaltySearch.toLowerCase()) || c.phone.includes(loyaltySearch))
+                        .slice(0, 5)
+                        .map(c => (
+                          <button
+                            key={c.id}
+                            className="w-full text-left px-3 py-2 hover:bg-secondary/50 transition-colors text-sm"
+                            onClick={() => { setSelectedLoyaltyCustomer(c); setLoyaltySearch(""); }}
+                          >
+                            <span className="font-medium text-foreground">{c.name}</span>
+                            <span className="text-muted-foreground ml-2">{c.phone} · {c.tier} · {c.points} pts</span>
+                          </button>
+                        ))}
+                      {loyaltyCustomers.filter(c => c.name.toLowerCase().includes(loyaltySearch.toLowerCase()) || c.phone.includes(loyaltySearch)).length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-2">Sin resultados</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <Button className="w-full" onClick={handleRegisterPayment}>
               <CheckCircle2 className="w-4 h-4 mr-1" /> Confirmar Pago
             </Button>
