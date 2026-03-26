@@ -587,6 +587,128 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_attendance: {
+        Row: {
+          check_in: string
+          check_out: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          shift_id: string | null
+          staff_id: string
+        }
+        Insert: {
+          check_in?: string
+          check_out?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          shift_id?: string | null
+          staff_id: string
+        }
+        Update: {
+          check_in?: string
+          check_out?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          shift_id?: string | null
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_attendance_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "staff_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_attendance_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_members: {
+        Row: {
+          active: boolean
+          created_at: string
+          email: string | null
+          hire_date: string
+          id: string
+          name: string
+          phone: string
+          role: string
+          user_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          email?: string | null
+          hire_date?: string
+          id?: string
+          name: string
+          phone?: string
+          role?: string
+          user_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          email?: string | null
+          hire_date?: string
+          id?: string
+          name?: string
+          phone?: string
+          role?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      staff_shifts: {
+        Row: {
+          created_at: string
+          created_by: string
+          end_time: string
+          id: string
+          notes: string | null
+          shift_date: string
+          staff_id: string
+          start_time: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          end_time: string
+          id?: string
+          notes?: string | null
+          shift_date: string
+          staff_id: string
+          start_time: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          end_time?: string
+          id?: string
+          notes?: string | null
+          shift_date?: string
+          staff_id?: string
+          start_time?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_shifts_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subcategories: {
         Row: {
           category_id: string
