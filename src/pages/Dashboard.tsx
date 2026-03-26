@@ -10,7 +10,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 interface InventoryAlert {
   id: string;
@@ -70,6 +70,56 @@ const Dashboard = () => {
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [popularProducts, setPopularProducts] = useState<PopularProduct[]>([]);
   const [hourlySales, setHourlySales] = useState<{ hora: string; ventas: number; pedidos: number }[]>([]);
+  const [categorySales, setCategorySales] = useState<{ name: string; value: number }[]>([]);
+
+  const CATEGORY_COLORS = [
+    "hsl(var(--primary))",
+    "hsl(var(--success))",
+    "hsl(var(--warning))",
+    "hsl(var(--info))",
+    "hsl(var(--destructive))",
+    "hsl(var(--accent))",
+    "hsl(30 80% 55%)",
+    "hsl(280 60% 55%)",
+  ];
+
+  const fetchCategorySales = async () => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { data: items } = await supabase
+      .from("order_items")
+      .select("product_id, quantity, subtotal")
+      .gte("created_at", todayStart.toISOString());
+
+    if (!items || items.length === 0) { setCategorySales([]); return; }
+
+    const productIds = [...new Set(items.map((i: any) => i.product_id))];
+    const { data: products } = await supabase
+      .from("products")
+      .select("id, category_id")
+      .in("id", productIds);
+
+    const categoryIds = [...new Set((products || []).map((p: any) => p.category_id).filter(Boolean))];
+    const { data: categories } = categoryIds.length > 0
+      ? await supabase.from("categories").select("id, name").in("id", categoryIds)
+      : { data: [] };
+
+    const catNameMap = new Map((categories || []).map((c: any) => [c.id, c.name]));
+    const prodCatMap = new Map((products || []).map((p: any) => [p.id, p.category_id]));
+
+    const salesByCat = new Map<string, number>();
+    items.forEach((i: any) => {
+      const catId = prodCatMap.get(i.product_id);
+      const catName = catId ? catNameMap.get(catId) || "Sin categoría" : "Sin categoría";
+      salesByCat.set(catName, (salesByCat.get(catName) || 0) + i.subtotal);
+    });
+
+    const sorted = Array.from(salesByCat.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+    setCategorySales(sorted);
+  };
 
   const fetchHourlySales = async () => {
     const todayStart = new Date();
