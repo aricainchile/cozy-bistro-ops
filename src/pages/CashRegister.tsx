@@ -325,6 +325,8 @@ const CashRegister = () => {
     setPaymentAmount(order.total.toString());
     setPaymentMethod("efectivo");
     setPaymentTip("0");
+    setSelectedLoyaltyCustomer(null);
+    setLoyaltySearch("");
     setShowPaymentDialog(true);
   };
 
