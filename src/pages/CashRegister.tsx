@@ -285,11 +285,37 @@ const CashRegister = () => {
       }
     }
 
-    toast.success(`Pago registrado - Boleta #${(data as any).receipt_number}`);
+    // Accumulate loyalty points if customer selected
+    let earnedPoints = 0;
+    if (selectedLoyaltyCustomer) {
+      earnedPoints = Math.floor(amount / 1000) * POINTS_PER_1000;
+      if (earnedPoints > 0) {
+        await supabase.from("loyalty_transactions").insert({
+          customer_id: selectedLoyaltyCustomer.id,
+          order_id: paymentOrderId,
+          points: earnedPoints,
+          type: "earn",
+          description: `Compra Boleta #${(data as any).receipt_number} - ${formatPrice(amount)}`,
+          created_by: user.id,
+        } as any);
+
+        await supabase.from("loyalty_customers").update({
+          points: selectedLoyaltyCustomer.points + earnedPoints,
+          total_spent: (selectedLoyaltyCustomer as any).total_spent + amount,
+          total_visits: (selectedLoyaltyCustomer as any).total_visits + 1,
+          last_visit_at: new Date().toISOString(),
+        } as any).eq("id", selectedLoyaltyCustomer.id);
+      }
+    }
+
+    const pointsMsg = earnedPoints > 0 ? ` · +${earnedPoints} puntos para ${selectedLoyaltyCustomer!.name}` : "";
+    toast.success(`Pago registrado - Boleta #${(data as any).receipt_number}${pointsMsg}`);
     setShowPaymentDialog(false);
     setPaymentOrderId("");
     setPaymentAmount("");
     setPaymentTip("0");
+    setSelectedLoyaltyCustomer(null);
+    setLoyaltySearch("");
     setSelectedReceipt(data as Payment);
     setShowReceiptDialog(true);
   };
