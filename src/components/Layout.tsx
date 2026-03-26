@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, Grid3X3, ShoppingBag, ClipboardList,
   DollarSign, Package, Printer, Truck, Star, UserCog, CreditCard,
-  BarChart3, FileBarChart, LogOut, ChevronLeft, ChevronRight, UtensilsCrossed,
+  BarChart3, FileBarChart, LogOut, ChevronLeft, ChevronRight, UtensilsCrossed, Settings,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AppModule, roleDisplayName } from "@/lib/permissions";
@@ -30,6 +30,7 @@ const menuItems: MenuItem[] = [
   { icon: CreditCard, label: "POS", path: "/pos", module: "pos" },
   { icon: BarChart3, label: "Análisis", path: "/analisis", module: "analisis" },
   { icon: FileBarChart, label: "Reportes", path: "/reportes", module: "reportes" },
+  { icon: Settings, label: "Configuración", path: "/configuracion", module: "configuracion" },
 ];
 
 const Layout = ({ children }: { children: React.ReactNode }) => {

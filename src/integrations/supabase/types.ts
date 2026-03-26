@@ -476,6 +476,39 @@ export type Database = {
           },
         ]
       }
+      printers: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          ip_address: string
+          location: string
+          name: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          ip_address?: string
+          location?: string
+          name: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          ip_address?: string
+          location?: string
+          name?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           active: boolean
