@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface InventoryAlert {
   id: string;
@@ -68,6 +69,42 @@ const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats>({ salesToday: 0, activeOrders: 0, occupiedTables: 0, totalTables: 0, guestsToday: 0 });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [popularProducts, setPopularProducts] = useState<PopularProduct[]>([]);
+  const [hourlySales, setHourlySales] = useState<{ hora: string; ventas: number; pedidos: number }[]>([]);
+
+  const fetchHourlySales = async () => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { data: payments } = await supabase
+      .from("payments")
+      .select("amount, created_at")
+      .gte("created_at", todayStart.toISOString());
+
+    const { data: orders } = await supabase
+      .from("orders")
+      .select("id, created_at")
+      .gte("created_at", todayStart.toISOString());
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const startHour = Math.max(8, Math.min(...(payments || []).map(p => new Date(p.created_at).getHours()), ...(orders || []).map(o => new Date(o.created_at).getHours()), currentHour));
+    
+    const hourlyData: { hora: string; ventas: number; pedidos: number }[] = [];
+    for (let h = startHour; h <= Math.min(currentHour, 23); h++) {
+      const label = `${h.toString().padStart(2, "0")}:00`;
+      const salesInHour = (payments || [])
+        .filter(p => new Date(p.created_at).getHours() === h)
+        .reduce((s, p) => s + p.amount, 0);
+      const ordersInHour = (orders || [])
+        .filter(o => new Date(o.created_at).getHours() === h).length;
+      hourlyData.push({ hora: label, ventas: salesInHour, pedidos: ordersInHour });
+    }
+    if (hourlyData.length === 0) {
+      for (let h = 8; h <= 23; h++) {
+        hourlyData.push({ hora: `${h.toString().padStart(2, "0")}:00`, ventas: 0, pedidos: 0 });
+      }
+    }
+    setHourlySales(hourlyData);
+  };
 
   const fetchStats = async () => {
     const todayStart = new Date();
@@ -184,12 +221,13 @@ const Dashboard = () => {
     fetchStats();
     fetchRecentOrders();
     fetchPopularProducts();
+    fetchHourlySales();
 
     const channel = supabase
       .channel("dashboard-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, () => fetchLowStock())
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => { fetchStats(); fetchRecentOrders(); fetchPopularProducts(); })
-      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => fetchStats())
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => { fetchStats(); fetchRecentOrders(); fetchPopularProducts(); fetchHourlySales(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => { fetchStats(); fetchHourlySales(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => fetchStats())
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => { fetchRecentOrders(); fetchPopularProducts(); })
       .subscribe();
@@ -249,6 +287,50 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Hourly Sales Chart */}
+      <div className="glass-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display font-semibold text-foreground">Ventas por Hora</h3>
+          <span className="text-xs text-muted-foreground">Hoy</span>
+        </div>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={hourlySales} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="ordersGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+              <XAxis dataKey="hora" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+              <Tooltip
+                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, color: "hsl(var(--foreground))" }}
+                labelStyle={{ color: "hsl(var(--muted-foreground))" }}
+                formatter={(value: number, name: string) => [name === "ventas" ? formatCLP(value) : value, name === "ventas" ? "Ventas" : "Pedidos"]}
+              />
+              <Area type="monotone" dataKey="ventas" stroke="hsl(var(--primary))" fill="url(#salesGradient)" strokeWidth={2} dot={false} />
+              <Area type="monotone" dataKey="pedidos" stroke="hsl(var(--success))" fill="url(#ordersGradient)" strokeWidth={2} dot={false} yAxisId={0} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex items-center gap-6 mt-3">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-primary" />
+            <span className="text-xs text-muted-foreground">Ventas ($)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-success" />
+            <span className="text-xs text-muted-foreground">Pedidos</span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
