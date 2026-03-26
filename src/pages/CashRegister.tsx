@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { CreditCard, Banknote, Building2, ArrowUpRight, CheckCircle2, Plus, X, Receipt, Clock, DollarSign, Printer } from "lucide-react";
+import { CreditCard, Banknote, Building2, ArrowUpRight, CheckCircle2, Plus, X, Receipt, Clock, DollarSign, Printer, Star, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,14 @@ interface Order {
   total: number;
   status: string;
   notes: string | null;
+}
+
+interface LoyaltyCustomer {
+  id: string;
+  name: string;
+  phone: string;
+  points: number;
+  tier: string;
 }
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -89,6 +97,12 @@ const CashRegister = () => {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentTip, setPaymentTip] = useState("0");
 
+  // Loyalty
+  const [loyaltyCustomers, setLoyaltyCustomers] = useState<LoyaltyCustomer[]>([]);
+  const [loyaltySearch, setLoyaltySearch] = useState("");
+  const [selectedLoyaltyCustomer, setSelectedLoyaltyCustomer] = useState<LoyaltyCustomer | null>(null);
+  const POINTS_PER_1000 = 10; // 10 points per $1000 spent
+
   const fetchData = async () => {
     setLoading(true);
     // Fetch active session
@@ -126,6 +140,13 @@ const CashRegister = () => {
 
     const unpaid = (orders ?? []).filter((o: any) => !paidOrderIds.includes(o.id));
     setPendingOrders(unpaid as Order[]);
+
+    // Fetch loyalty customers
+    const { data: customers } = await supabase
+      .from("loyalty_customers")
+      .select("id, name, phone, points, tier")
+      .order("name");
+    setLoyaltyCustomers((customers as LoyaltyCustomer[]) ?? []);
 
     setLoading(false);
   };
@@ -264,11 +285,37 @@ const CashRegister = () => {
       }
     }
 
-    toast.success(`Pago registrado - Boleta #${(data as any).receipt_number}`);
+    // Accumulate loyalty points if customer selected
+    let earnedPoints = 0;
+    if (selectedLoyaltyCustomer) {
+      earnedPoints = Math.floor(amount / 1000) * POINTS_PER_1000;
+      if (earnedPoints > 0) {
+        await supabase.from("loyalty_transactions").insert({
+          customer_id: selectedLoyaltyCustomer.id,
+          order_id: paymentOrderId,
+          points: earnedPoints,
+          type: "earn",
+          description: `Compra Boleta #${(data as any).receipt_number} - ${formatPrice(amount)}`,
+          created_by: user.id,
+        } as any);
+
+        await supabase.from("loyalty_customers").update({
+          points: selectedLoyaltyCustomer.points + earnedPoints,
+          total_spent: (selectedLoyaltyCustomer as any).total_spent + amount,
+          total_visits: (selectedLoyaltyCustomer as any).total_visits + 1,
+          last_visit_at: new Date().toISOString(),
+        } as any).eq("id", selectedLoyaltyCustomer.id);
+      }
+    }
+
+    const pointsMsg = earnedPoints > 0 ? ` · +${earnedPoints} puntos para ${selectedLoyaltyCustomer!.name}` : "";
+    toast.success(`Pago registrado - Boleta #${(data as any).receipt_number}${pointsMsg}`);
     setShowPaymentDialog(false);
     setPaymentOrderId("");
     setPaymentAmount("");
     setPaymentTip("0");
+    setSelectedLoyaltyCustomer(null);
+    setLoyaltySearch("");
     setSelectedReceipt(data as Payment);
     setShowReceiptDialog(true);
   };
@@ -278,6 +325,8 @@ const CashRegister = () => {
     setPaymentAmount(order.total.toString());
     setPaymentMethod("efectivo");
     setPaymentTip("0");
+    setSelectedLoyaltyCustomer(null);
+    setLoyaltySearch("");
     setShowPaymentDialog(true);
   };
 
@@ -563,6 +612,55 @@ const CashRegister = () => {
             <div>
               <Label>Propina ($)</Label>
               <Input type="number" value={paymentTip} onChange={(e) => setPaymentTip(e.target.value)} />
+            </div>
+            {/* Loyalty customer selector */}
+            <div>
+              <Label className="flex items-center gap-1"><Star className="w-3.5 h-3.5 text-primary" /> Cliente Fidelizado (opcional)</Label>
+              {selectedLoyaltyCustomer ? (
+                <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20 mt-1">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{selectedLoyaltyCustomer.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedLoyaltyCustomer.tier} · {selectedLoyaltyCustomer.points} pts · Ganará +{Math.floor((parseInt(paymentAmount) || 0) / 1000) * POINTS_PER_1000} pts
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => { setSelectedLoyaltyCustomer(null); setLoyaltySearch(""); }}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-1 space-y-1">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nombre o teléfono..."
+                      value={loyaltySearch}
+                      onChange={(e) => setLoyaltySearch(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                  {loyaltySearch.length >= 2 && (
+                    <div className="max-h-32 overflow-y-auto rounded-lg border border-border bg-background">
+                      {loyaltyCustomers
+                        .filter(c => c.name.toLowerCase().includes(loyaltySearch.toLowerCase()) || c.phone.includes(loyaltySearch))
+                        .slice(0, 5)
+                        .map(c => (
+                          <button
+                            key={c.id}
+                            className="w-full text-left px-3 py-2 hover:bg-secondary/50 transition-colors text-sm"
+                            onClick={() => { setSelectedLoyaltyCustomer(c); setLoyaltySearch(""); }}
+                          >
+                            <span className="font-medium text-foreground">{c.name}</span>
+                            <span className="text-muted-foreground ml-2">{c.phone} · {c.tier} · {c.points} pts</span>
+                          </button>
+                        ))}
+                      {loyaltyCustomers.filter(c => c.name.toLowerCase().includes(loyaltySearch.toLowerCase()) || c.phone.includes(loyaltySearch)).length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-2">Sin resultados</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <Button className="w-full" onClick={handleRegisterPayment}>
               <CheckCircle2 className="w-4 h-4 mr-1" /> Confirmar Pago
