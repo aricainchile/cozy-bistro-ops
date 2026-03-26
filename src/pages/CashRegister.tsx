@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { CreditCard, Banknote, Building2, ArrowUpRight, CheckCircle2, Plus, X, Receipt, Clock, DollarSign, Printer } from "lucide-react";
+import { CreditCard, Banknote, Building2, ArrowUpRight, CheckCircle2, Plus, X, Receipt, Clock, DollarSign, Printer, Star, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
