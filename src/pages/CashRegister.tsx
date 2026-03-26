@@ -141,6 +141,13 @@ const CashRegister = () => {
     const unpaid = (orders ?? []).filter((o: any) => !paidOrderIds.includes(o.id));
     setPendingOrders(unpaid as Order[]);
 
+    // Fetch loyalty customers
+    const { data: customers } = await supabase
+      .from("loyalty_customers")
+      .select("id, name, phone, points, tier")
+      .order("name");
+    setLoyaltyCustomers((customers as LoyaltyCustomer[]) ?? []);
+
     setLoading(false);
   };
 
