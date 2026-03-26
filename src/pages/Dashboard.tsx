@@ -413,6 +413,73 @@ const Dashboard = () => {
     : activePreset === "7dias" ? "Últimos 7 días" : activePreset === "30dias" ? "Últimos 30 días"
     : `${format(dateFrom, "dd/MM")} – ${format(dateTo, "dd/MM")}`;
 
+  const exportToCSV = () => {
+    const rows: string[][] = [];
+    rows.push(["Dashboard — " + periodLabel]);
+    rows.push([]);
+    rows.push(["Métrica", "Valor"]);
+    rows.push(["Ventas", String(stats.salesToday)]);
+    rows.push(["Pedidos Activos", String(stats.activeOrders)]);
+    rows.push(["Mesas Ocupadas", `${stats.occupiedTables}/${stats.totalTables}`]);
+    rows.push(["Comensales", String(stats.guestsToday)]);
+    rows.push([]);
+    rows.push([isSingleDay ? "Hora" : "Día", "Ventas ($)", "Pedidos"]);
+    hourlySales.forEach((h) => rows.push([h.hora, String(h.ventas), String(h.pedidos)]));
+    rows.push([]);
+    rows.push(["Categoría", "Ventas ($)"]);
+    categorySales.forEach((c) => rows.push([c.name, String(c.value)]));
+    rows.push([]);
+    rows.push(["Pedido #", "Mesa", "Items", "Total", "Estado", "Hora"]);
+    recentOrders.forEach((o) => rows.push([String(o.order_number), o.table_label, String(o.items_count), String(o.total), o.status, o.time]));
+    rows.push([]);
+    rows.push(["Producto Popular", "Ventas"]);
+    popularProducts.forEach((p) => rows.push([p.name, String(p.sales)]));
+
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dashboard_${format(dateFrom, "yyyyMMdd")}_${format(dateTo, "yyyyMMdd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportToPDF = () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    const totalCat = categorySales.reduce((s, c) => s + c.value, 0);
+    w.document.write(`<!DOCTYPE html><html><head><title>Dashboard ${periodLabel}</title>
+      <style>body{font-family:Arial,sans-serif;padding:32px;color:#222}h1{font-size:22px;margin-bottom:4px}
+      h2{font-size:16px;margin-top:24px;border-bottom:1px solid #ccc;padding-bottom:4px}
+      table{width:100%;border-collapse:collapse;margin-top:8px}th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #eee;font-size:13px}
+      th{background:#f5f5f5;font-weight:600}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px}
+      .stat-card{padding:16px;border:1px solid #ddd;border-radius:8px;text-align:center}.stat-val{font-size:24px;font-weight:700}.stat-lbl{font-size:12px;color:#666}
+      @media print{body{padding:16px}}</style></head><body>
+      <h1>Reporte Dashboard</h1><p style="color:#666;font-size:13px">Periodo: ${periodLabel}</p>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-val">${formatCLP(stats.salesToday)}</div><div class="stat-lbl">Ventas</div></div>
+        <div class="stat-card"><div class="stat-val">${stats.activeOrders}</div><div class="stat-lbl">Pedidos Activos</div></div>
+        <div class="stat-card"><div class="stat-val">${stats.occupiedTables}/${stats.totalTables}</div><div class="stat-lbl">Mesas Ocupadas</div></div>
+        <div class="stat-card"><div class="stat-val">${stats.guestsToday}</div><div class="stat-lbl">Comensales</div></div>
+      </div>
+      <h2>${isSingleDay ? "Ventas por Hora" : "Ventas por Día"}</h2>
+      <table><tr><th>${isSingleDay ? "Hora" : "Día"}</th><th>Ventas</th><th>Pedidos</th></tr>
+      ${hourlySales.map((h) => `<tr><td>${h.hora}</td><td>${formatCLP(h.ventas)}</td><td>${h.pedidos}</td></tr>`).join("")}</table>
+      <h2>Ventas por Categoría</h2>
+      <table><tr><th>Categoría</th><th>Ventas</th><th>%</th></tr>
+      ${categorySales.map((c) => `<tr><td>${c.name}</td><td>${formatCLP(c.value)}</td><td>${totalCat > 0 ? ((c.value / totalCat) * 100).toFixed(1) : 0}%</td></tr>`).join("")}</table>
+      <h2>Pedidos Recientes</h2>
+      <table><tr><th>#</th><th>Mesa</th><th>Items</th><th>Total</th><th>Estado</th><th>Hora</th></tr>
+      ${recentOrders.map((o) => `<tr><td>${o.order_number}</td><td>${o.table_label}</td><td>${o.items_count}</td><td>${formatCLP(o.total)}</td><td>${o.status}</td><td>${o.time}</td></tr>`).join("")}</table>
+      <h2>Productos Populares</h2>
+      <table><tr><th>Producto</th><th>Ventas</th></tr>
+      ${popularProducts.map((p) => `<tr><td>${p.name}</td><td>${p.sales}</td></tr>`).join("")}</table>
+      </body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  };
+
   const statCards = [
     { label: "Ventas", value: formatCLP(stats.salesToday), icon: DollarSign, color: "text-success", up: stats.salesToday > 0 },
     { label: "Pedidos Activos", value: String(stats.activeOrders), icon: ClipboardList, color: "text-info", up: stats.activeOrders > 0 },
@@ -422,7 +489,7 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Date Range Filter */}
+      {/* Date Range Filter + Export */}
       <div className="flex flex-wrap items-center gap-2">
         {(["hoy", "ayer", "7dias", "30dias"] as DatePreset[]).map((preset) => {
           const labels: Record<string, string> = { hoy: "Hoy", ayer: "Ayer", "7dias": "7 días", "30dias": "30 días" };
