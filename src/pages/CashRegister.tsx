@@ -45,6 +45,14 @@ interface Order {
   notes: string | null;
 }
 
+interface LoyaltyCustomer {
+  id: string;
+  name: string;
+  phone: string;
+  points: number;
+  tier: string;
+}
+
 const METHOD_LABELS: Record<PaymentMethod, string> = {
   efectivo: "Efectivo",
   debito: "Débito",
