@@ -468,19 +468,21 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-3 glass-card p-5">
+          <h3 className="font-display font-semibold text-foreground mb-4">Productos Populares</h3>
           {popularProducts.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">Sin ventas hoy</p>
           ) : (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {popularProducts.map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                  <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                      {i + 1}
-                    </span>
+                <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                  <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                    {i + 1}
+                  </span>
+                  <div>
                     <p className="text-sm font-medium text-foreground">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">{item.sales} ventas</p>
                   </div>
-                  <span className="text-sm text-muted-foreground">{item.sales} ventas</span>
                 </div>
               ))}
             </div>
