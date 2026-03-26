@@ -3,10 +3,8 @@ import {
   ClipboardList,
   DollarSign,
   Grid3X3,
-  TrendingUp,
   Users,
   Package,
-  ShoppingBag,
   ArrowUpRight,
   ArrowDownRight,
   AlertTriangle,
@@ -21,31 +19,55 @@ interface InventoryAlert {
   unit: string;
 }
 
-const stats = [
-  { label: "Ventas Hoy", value: "$1.245.000", change: "+12%", up: true, icon: DollarSign, color: "text-success" },
-  { label: "Pedidos Activos", value: "18", change: "+3", up: true, icon: ClipboardList, color: "text-info" },
-  { label: "Mesas Ocupadas", value: "12/20", change: "60%", up: false, icon: Grid3X3, color: "text-primary" },
-  { label: "Clientes Hoy", value: "87", change: "+8%", up: true, icon: Users, color: "text-accent" },
-];
+interface DashboardStats {
+  salesToday: number;
+  activeOrders: number;
+  occupiedTables: number;
+  totalTables: number;
+  guestsToday: number;
+}
 
-const recentOrders = [
-  { id: "#001", table: "Mesa 5", items: 4, total: "$45.000", status: "En cocina", time: "12:30" },
-  { id: "#002", table: "Mesa 3", items: 2, total: "$28.000", status: "Servido", time: "12:25" },
-  { id: "#003", table: "Mesa 8", items: 6, total: "$72.000", status: "En preparación", time: "12:20" },
-  { id: "#004", table: "Mesa 1", items: 3, total: "$35.000", status: "Pendiente", time: "12:15" },
-  { id: "#005", table: "Delivery", items: 2, total: "$22.000", status: "En camino", time: "12:10" },
-];
+interface RecentOrder {
+  id: string;
+  order_number: number;
+  table_number: number | null;
+  table_label: string;
+  items_count: number;
+  total: number;
+  status: string;
+  time: string;
+}
+
+interface PopularProduct {
+  name: string;
+  category: string;
+  sales: number;
+}
+
+const orderStatusMap: Record<string, string> = {
+  pending: "Pendiente",
+  in_preparation: "En preparación",
+  ready: "Listo",
+  served: "Servido",
+  cancelled: "Cancelado",
+};
 
 const statusColors: Record<string, string> = {
-  "En cocina": "bg-warning/20 text-warning",
+  "En preparación": "bg-warning/20 text-warning",
   "Servido": "bg-success/20 text-success",
-  "En preparación": "bg-info/20 text-info",
+  "Listo": "bg-info/20 text-info",
   "Pendiente": "bg-muted text-muted-foreground",
-  "En camino": "bg-primary/20 text-primary",
+  "Cancelado": "bg-destructive/20 text-destructive",
 };
+
+const formatCLP = (n: number) =>
+  "$" + n.toLocaleString("es-CL");
 
 const Dashboard = () => {
   const [lowStockItems, setLowStockItems] = useState<InventoryAlert[]>([]);
+  const [stats, setStats] = useState<DashboardStats>({ salesToday: 0, activeOrders: 0, occupiedTables: 0, totalTables: 0, guestsToday: 0 });
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [popularProducts, setPopularProducts] = useState<PopularProduct[]>([]);
 
   useEffect(() => {
     const fetchLowStock = async () => {
