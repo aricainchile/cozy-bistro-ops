@@ -233,6 +233,37 @@ const CashRegister = () => {
     // Update order status to served if not already
     await supabase.from("orders").update({ status: "served" } as any).eq("id", paymentOrderId);
 
+    // Auto-deduct inventory for each order item
+    const { data: orderItems } = await supabase
+      .from("order_items")
+      .select("product_id, quantity")
+      .eq("order_id", paymentOrderId);
+
+    if (orderItems && orderItems.length > 0) {
+      const productIds = orderItems.map((i: any) => i.product_id);
+      const { data: invItems } = await supabase
+        .from("inventory_items")
+        .select("id, product_id")
+        .in("product_id", productIds);
+
+      if (invItems && invItems.length > 0) {
+        const invMap = new Map(invItems.map((i: any) => [i.product_id, i.id]));
+        const movements = orderItems
+          .filter((oi: any) => invMap.has(oi.product_id))
+          .map((oi: any) => ({
+            inventory_item_id: invMap.get(oi.product_id),
+            type: "venta" as const,
+            quantity: oi.quantity,
+            reason: `Venta - Boleta #${(data as any).receipt_number}`,
+            created_by: user.id,
+          }));
+
+        if (movements.length > 0) {
+          await supabase.from("inventory_movements").insert(movements as any);
+        }
+      }
+    }
+
     toast.success(`Pago registrado - Boleta #${(data as any).receipt_number}`);
     setShowPaymentDialog(false);
     setPaymentOrderId("");
