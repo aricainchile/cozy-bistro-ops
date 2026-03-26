@@ -19,6 +19,7 @@ import Loyalty from "./pages/Loyalty";
 import Staff from "./pages/Staff";
 import POS from "./pages/POS";
 import Analytics from "./pages/Analytics";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 import { AppModule } from "@/lib/permissions";
 import { ReactNode } from "react";
@@ -61,6 +62,7 @@ const AppRoutes = () => {
           <Route path="/personal" element={<ProtectedRoute module="personal"><Staff /></ProtectedRoute>} />
           <Route path="/pos" element={<ProtectedRoute module="pos"><POS /></ProtectedRoute>} />
           <Route path="/analisis" element={<ProtectedRoute module="analisis"><Analytics /></ProtectedRoute>} />
+          <Route path="/reportes" element={<ProtectedRoute module="reportes"><Reports /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Layout>

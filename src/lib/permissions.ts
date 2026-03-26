@@ -13,12 +13,13 @@ export type AppModule =
   | 'fidelizacion'
   | 'personal'
   | 'pos'
-  | 'analisis';
+  | 'analisis'
+  | 'reportes';
 
 const rolePermissions: Record<AppRole, AppModule[]> = {
   garzon: ['dashboard', 'pedidos', 'mesas', 'impresion'],
   jefe_local: ['dashboard', 'pedidos', 'mesas', 'caja', 'inventario', 'usuarios', 'impresion', 'pos'],
-  admin: ['dashboard', 'usuarios', 'mesas', 'productos', 'pedidos', 'caja', 'inventario', 'impresion', 'delivery', 'fidelizacion', 'personal', 'pos', 'analisis'],
+  admin: ['dashboard', 'usuarios', 'mesas', 'productos', 'pedidos', 'caja', 'inventario', 'impresion', 'delivery', 'fidelizacion', 'personal', 'pos', 'analisis', 'reportes'],
 };
 
 export const hasModuleAccess = (role: AppRole | null, module: AppModule): boolean => {
