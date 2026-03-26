@@ -74,6 +74,56 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_orders: {
+        Row: {
+          assigned_driver: string | null
+          created_at: string
+          customer_address: string
+          customer_name: string
+          customer_phone: string
+          delivery_notes: string | null
+          estimated_time: string | null
+          id: string
+          order_id: string | null
+          status: Database["public"]["Enums"]["delivery_status"]
+          updated_at: string
+        }
+        Insert: {
+          assigned_driver?: string | null
+          created_at?: string
+          customer_address?: string
+          customer_name: string
+          customer_phone?: string
+          delivery_notes?: string | null
+          estimated_time?: string | null
+          id?: string
+          order_id?: string | null
+          status?: Database["public"]["Enums"]["delivery_status"]
+          updated_at?: string
+        }
+        Update: {
+          assigned_driver?: string | null
+          created_at?: string
+          customer_address?: string
+          customer_name?: string
+          customer_phone?: string
+          delivery_notes?: string | null
+          estimated_time?: string | null
+          id?: string
+          order_id?: string | null
+          status?: Database["public"]["Enums"]["delivery_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_items: {
         Row: {
           created_at: string
@@ -485,6 +535,12 @@ export type Database = {
     }
     Enums: {
       app_role: "garzon" | "jefe_local" | "admin"
+      delivery_status:
+        | "pendiente"
+        | "preparando"
+        | "en_camino"
+        | "entregado"
+        | "cancelado"
       movement_type: "entrada" | "salida" | "ajuste" | "venta"
       order_status:
         | "pending"
@@ -627,6 +683,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["garzon", "jefe_local", "admin"],
+      delivery_status: [
+        "pendiente",
+        "preparando",
+        "en_camino",
+        "entregado",
+        "cancelado",
+      ],
       movement_type: ["entrada", "salida", "ajuste", "venta"],
       order_status: [
         "pending",
