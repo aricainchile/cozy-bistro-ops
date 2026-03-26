@@ -97,6 +97,12 @@ const CashRegister = () => {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentTip, setPaymentTip] = useState("0");
 
+  // Loyalty
+  const [loyaltyCustomers, setLoyaltyCustomers] = useState<LoyaltyCustomer[]>([]);
+  const [loyaltySearch, setLoyaltySearch] = useState("");
+  const [selectedLoyaltyCustomer, setSelectedLoyaltyCustomer] = useState<LoyaltyCustomer | null>(null);
+  const POINTS_PER_1000 = 10; // 10 points per $1000 spent
+
   const fetchData = async () => {
     setLoading(true);
     // Fetch active session
