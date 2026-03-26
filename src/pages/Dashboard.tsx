@@ -544,8 +544,23 @@ const Dashboard = () => {
             </PopoverContent>
           </Popover>
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="text-xs gap-1.5 ml-auto">
+              <Download className="w-3.5 h-3.5" />
+              Exportar
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={exportToCSV} className="gap-2 text-xs">
+              <Download className="w-3.5 h-3.5" /> Descargar CSV
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={exportToPDF} className="gap-2 text-xs">
+              <FileText className="w-3.5 h-3.5" /> Imprimir / PDF
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-
       {/* Low stock alert */}
       {lowStockItems.length > 0 && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
