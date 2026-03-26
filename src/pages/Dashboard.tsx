@@ -10,7 +10,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 interface InventoryAlert {
   id: string;
@@ -70,6 +70,56 @@ const Dashboard = () => {
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [popularProducts, setPopularProducts] = useState<PopularProduct[]>([]);
   const [hourlySales, setHourlySales] = useState<{ hora: string; ventas: number; pedidos: number }[]>([]);
+  const [categorySales, setCategorySales] = useState<{ name: string; value: number }[]>([]);
+
+  const CATEGORY_COLORS = [
+    "hsl(var(--primary))",
+    "hsl(var(--success))",
+    "hsl(var(--warning))",
+    "hsl(var(--info))",
+    "hsl(var(--destructive))",
+    "hsl(var(--accent))",
+    "hsl(30 80% 55%)",
+    "hsl(280 60% 55%)",
+  ];
+
+  const fetchCategorySales = async () => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { data: items } = await supabase
+      .from("order_items")
+      .select("product_id, quantity, subtotal")
+      .gte("created_at", todayStart.toISOString());
+
+    if (!items || items.length === 0) { setCategorySales([]); return; }
+
+    const productIds = [...new Set(items.map((i: any) => i.product_id))];
+    const { data: products } = await supabase
+      .from("products")
+      .select("id, category_id")
+      .in("id", productIds);
+
+    const categoryIds = [...new Set((products || []).map((p: any) => p.category_id).filter(Boolean))];
+    const { data: categories } = categoryIds.length > 0
+      ? await supabase.from("categories").select("id, name").in("id", categoryIds)
+      : { data: [] };
+
+    const catNameMap = new Map((categories || []).map((c: any) => [c.id, c.name]));
+    const prodCatMap = new Map((products || []).map((p: any) => [p.id, p.category_id]));
+
+    const salesByCat = new Map<string, number>();
+    items.forEach((i: any) => {
+      const catId = prodCatMap.get(i.product_id);
+      const catName = catId ? catNameMap.get(catId) || "Sin categoría" : "Sin categoría";
+      salesByCat.set(catName, (salesByCat.get(catName) || 0) + i.subtotal);
+    });
+
+    const sorted = Array.from(salesByCat.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+    setCategorySales(sorted);
+  };
 
   const fetchHourlySales = async () => {
     const todayStart = new Date();
@@ -222,6 +272,7 @@ const Dashboard = () => {
     fetchRecentOrders();
     fetchPopularProducts();
     fetchHourlySales();
+    fetchCategorySales();
 
     const channel = supabase
       .channel("dashboard-realtime")
@@ -229,7 +280,7 @@ const Dashboard = () => {
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => { fetchStats(); fetchRecentOrders(); fetchPopularProducts(); fetchHourlySales(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => { fetchStats(); fetchHourlySales(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => fetchStats())
-      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => { fetchRecentOrders(); fetchPopularProducts(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => { fetchRecentOrders(); fetchPopularProducts(); fetchCategorySales(); })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -365,22 +416,73 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Popular items */}
+        {/* Category Sales Chart */}
         <div className="glass-card p-5">
+          <h3 className="font-display font-semibold text-foreground mb-4">Ventas por Categoría</h3>
+          {categorySales.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Sin datos hoy</p>
+          ) : (
+            <>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categorySales}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={45}
+                      outerRadius={75}
+                      paddingAngle={3}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {categorySales.map((_, i) => (
+                        <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, color: "hsl(var(--foreground))" }}
+                      formatter={(value: number) => [formatCLP(value), "Ventas"]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-2 mt-2">
+                {categorySales.map((cat, i) => {
+                  const total = categorySales.reduce((s, c) => s + c.value, 0);
+                  const pct = total > 0 ? ((cat.value / total) * 100).toFixed(0) : "0";
+                  return (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />
+                        <span className="text-xs text-foreground">{cat.name}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{pct}% · {formatCLP(cat.value)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-3 glass-card p-5">
           <h3 className="font-display font-semibold text-foreground mb-4">Productos Populares</h3>
           {popularProducts.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">Sin ventas hoy</p>
           ) : (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {popularProducts.map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                  <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                      {i + 1}
-                    </span>
+                <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                  <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                    {i + 1}
+                  </span>
+                  <div>
                     <p className="text-sm font-medium text-foreground">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">{item.sales} ventas</p>
                   </div>
-                  <span className="text-sm text-muted-foreground">{item.sales} ventas</span>
                 </div>
               ))}
             </div>
