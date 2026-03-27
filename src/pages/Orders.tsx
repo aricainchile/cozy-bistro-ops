@@ -213,11 +213,70 @@ const Orders = () => {
       .update({ status: "occupied", guests, updated_at: new Date().toISOString() })
       .eq("id", selectedTable);
 
+    // Generate print jobs automatically
+    await generatePrintJobs(order, items);
+
     toast.success(`Pedido #${order.order_number} enviado`);
     setCart([]);
     setOrderNotes("");
     setSending(false);
     setActiveTab("list");
+  };
+
+  const generatePrintJobs = async (
+    order: { id: string; order_number: number; table_id: string | null },
+    orderItems: Array<{ product_id: string; product_name: string; quantity: number; unit_price: number; subtotal: number }>
+  ) => {
+    try {
+      // Get product -> category -> print_destination mapping
+      const productIds = orderItems.map((i) => i.product_id);
+      const { data: productCats } = await supabase
+        .from("products")
+        .select("id, category_id, categories!products_category_id_fkey(print_destination)")
+        .in("id", productIds);
+
+      const destMap: Record<string, string> = {};
+      if (productCats) {
+        for (const p of productCats) {
+          const cat = p.categories as unknown as { print_destination: string } | null;
+          destMap[p.id] = cat?.print_destination || "cocina";
+        }
+      }
+
+      // Group items by destination
+      const grouped: Record<string, Array<{ name: string; quantity: number }>> = {};
+      const allItems: Array<{ name: string; quantity: number }> = [];
+      for (const item of orderItems) {
+        const dest = destMap[item.product_id] || "cocina";
+        if (!grouped[dest]) grouped[dest] = [];
+        grouped[dest].push({ name: item.product_name, quantity: item.quantity });
+        allItems.push({ name: item.product_name, quantity: item.quantity });
+      }
+
+      const tableLabel = getTableNumber(order.table_id);
+
+      // Create print jobs for each destination + one for caja
+      const printJobs = Object.entries(grouped).map(([dest, items]) => ({
+        order_id: order.id,
+        order_number: order.order_number,
+        table_info: tableLabel,
+        destination: dest,
+        items: JSON.stringify(items),
+      }));
+
+      // Always add a "caja" job with all items
+      printJobs.push({
+        order_id: order.id,
+        order_number: order.order_number,
+        table_info: tableLabel,
+        destination: "caja",
+        items: JSON.stringify(allItems),
+      });
+
+      await supabase.from("print_jobs").insert(printJobs as any);
+    } catch (e) {
+      console.error("Error generating print jobs:", e);
+    }
   };
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
