@@ -56,6 +56,7 @@ export type Database = {
           icon: string | null
           id: string
           name: string
+          print_destination: string
           sort_order: number
         }
         Insert: {
@@ -63,6 +64,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name: string
+          print_destination?: string
           sort_order?: number
         }
         Update: {
@@ -70,6 +72,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name?: string
+          print_destination?: string
           sort_order?: number
         }
         Relationships: []
@@ -469,6 +472,47 @@ export type Database = {
           },
           {
             foreignKeyName: "payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      print_jobs: {
+        Row: {
+          created_at: string
+          destination: string
+          id: string
+          items: Json
+          order_id: string
+          order_number: number
+          status: string
+          table_info: string
+        }
+        Insert: {
+          created_at?: string
+          destination: string
+          id?: string
+          items?: Json
+          order_id: string
+          order_number: number
+          status?: string
+          table_info?: string
+        }
+        Update: {
+          created_at?: string
+          destination?: string
+          id?: string
+          items?: Json
+          order_id?: string
+          order_number?: number
+          status?: string
+          table_info?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "print_jobs_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
