@@ -1,18 +1,20 @@
-import { Users, Shield, UserPlus, Edit, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, Shield, UserPlus, Edit, Trash2, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { AppRole, roleDisplayName } from "@/lib/permissions";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
-const users = [
-  { id: 1, name: "Carlos Muñoz", role: "garzon", email: "carlos@restaurant.cl", status: "active" },
-  { id: 2, name: "María López", role: "garzon", email: "maria@restaurant.cl", status: "active" },
-  { id: 3, name: "Pedro Soto", role: "jefe_local", email: "pedro@restaurant.cl", status: "active" },
-  { id: 4, name: "Ana Torres", role: "admin", email: "ana@restaurant.cl", status: "active" },
-  { id: 5, name: "Luis Herrera", role: "garzon", email: "luis@restaurant.cl", status: "inactive" },
-];
-
-const roleLabels: Record<string, string> = {
-  garzon: "Garzón",
-  jefe_local: "Jefe de Local",
-  admin: "Administrador",
-};
+interface UserRow {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: AppRole | null;
+}
 
 const roleColors: Record<string, string> = {
   garzon: "bg-info/20 text-info",
@@ -21,18 +23,136 @@ const roleColors: Record<string, string> = {
 };
 
 const UsersPage = () => {
+  const { toast } = useToast();
+  const { userRole } = useAuth();
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserRow | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formPassword, setFormPassword] = useState("");
+  const [formRole, setFormRole] = useState<AppRole>("garzon");
+  const [saving, setSaving] = useState(false);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    const { data: profiles, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, email");
+
+    if (error) {
+      toast({ title: "Error al cargar usuarios", description: error.message, variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    const { data: roles } = await supabase.from("user_roles").select("user_id, role");
+    const roleMap = new Map((roles || []).map((r) => [r.user_id, r.role as AppRole]));
+
+    setUsers(
+      (profiles || []).map((p) => ({
+        id: p.id,
+        full_name: p.full_name,
+        email: p.email,
+        role: roleMap.get(p.id) || null,
+      }))
+    );
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const openCreate = () => {
+    setEditingUser(null);
+    setFormName("");
+    setFormEmail("");
+    setFormPassword("");
+    setFormRole("garzon");
+    setDialogOpen(true);
+  };
+
+  const openEdit = (user: UserRow) => {
+    setEditingUser(user);
+    setFormName(user.full_name || "");
+    setFormEmail(user.email || "");
+    setFormPassword("");
+    setFormRole(user.role || "garzon");
+    setDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      if (editingUser) {
+        // Update profile name
+        await supabase.from("profiles").update({ full_name: formName }).eq("id", editingUser.id);
+        // Update role
+        const { data: existingRole } = await supabase
+          .from("user_roles")
+          .select("id")
+          .eq("user_id", editingUser.id)
+          .maybeSingle();
+
+        if (existingRole) {
+          await supabase.from("user_roles").update({ role: formRole }).eq("user_id", editingUser.id);
+        } else {
+          await supabase.from("user_roles").insert({ user_id: editingUser.id, role: formRole });
+        }
+        toast({ title: "Usuario actualizado" });
+      } else {
+        // Create new user via signUp
+        if (!formEmail || !formPassword) {
+          toast({ title: "Email y contraseña son requeridos", variant: "destructive" });
+          setSaving(false);
+          return;
+        }
+        const { data, error } = await supabase.auth.signUp({
+          email: formEmail,
+          password: formPassword,
+          options: { data: { full_name: formName } },
+        });
+        if (error) throw error;
+        if (data.user) {
+          await supabase.from("user_roles").insert({ user_id: data.user.id, role: formRole });
+        }
+        toast({ title: "Usuario creado", description: "Debe confirmar su email para iniciar sesión" });
+      }
+      setDialogOpen(false);
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setSaving(false);
+  };
+
+  const handleDelete = async (user: UserRow) => {
+    if (!confirm(`¿Eliminar a ${user.full_name || user.email}?`)) return;
+    // Remove role (profile stays as it's managed by auth trigger)
+    await supabase.from("user_roles").delete().eq("user_id", user.id);
+    toast({ title: "Rol de usuario eliminado" });
+    fetchUsers();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">{users.length} usuarios registrados</p>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg gradient-primary text-primary-foreground font-medium text-sm">
-          <UserPlus className="w-4 h-4" /> Agregar Usuario
-        </button>
+        {(userRole === "admin" || userRole === "jefe_local") && (
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg gradient-primary text-primary-foreground font-medium text-sm"
+          >
+            <UserPlus className="w-4 h-4" /> Agregar Usuario
+          </button>
+        )}
       </div>
 
       {/* Role legend */}
       <div className="flex gap-3">
-        {Object.entries(roleLabels).map(([key, label]) => (
+        {Object.entries(roleDisplayName).map(([key, label]) => (
           <div key={key} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium ${roleColors[key]}`}>
             <Shield className="w-3 h-3" /> {label}
           </div>
@@ -81,48 +201,111 @@ const UsersPage = () => {
 
       {/* Users list */}
       <div className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Nombre</th>
-                <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Email</th>
-                <th className="text-center text-xs font-medium text-muted-foreground px-4 py-3">Rol</th>
-                <th className="text-center text-xs font-medium text-muted-foreground px-4 py-3">Estado</th>
-                <th className="text-center text-xs font-medium text-muted-foreground px-4 py-3">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                  <td className="px-4 py-3 text-sm font-medium text-foreground">{user.name}</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">{user.email}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${roleColors[user.role]}`}>
-                      {roleLabels[user.role]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${user.status === "active" ? "status-available" : "bg-muted text-muted-foreground"}`}>
-                      {user.status === "active" ? "Activo" : "Inactivo"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2">
-                      <button className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center text-muted-foreground hover:text-primary transition-colors">
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-                      <button className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
+        {loading ? (
+          <div className="flex items-center justify-center p-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Nombre</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Email</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground px-4 py-3">Rol</th>
+                  <th className="text-center text-xs font-medium text-muted-foreground px-4 py-3">Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-foreground">{user.full_name || "Sin nombre"}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{user.email}</td>
+                    <td className="px-4 py-3 text-center">
+                      {user.role ? (
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${roleColors[user.role]}`}>
+                          {roleDisplayName[user.role]}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Sin rol</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => openEdit(user)}
+                          className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        {userRole === "admin" && (
+                          <button
+                            onClick={() => handleDelete(user)}
+                            className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No hay usuarios registrados</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      {/* Create/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingUser ? "Editar Usuario" : "Agregar Usuario"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Nombre completo</Label>
+              <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Nombre del usuario" />
+            </div>
+            {!editingUser && (
+              <>
+                <div>
+                  <Label>Email</Label>
+                  <Input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} placeholder="correo@ejemplo.cl" />
+                </div>
+                <div>
+                  <Label>Contraseña</Label>
+                  <Input type="password" value={formPassword} onChange={(e) => setFormPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+                </div>
+              </>
+            )}
+            <div>
+              <Label>Rol</Label>
+              <Select value={formRole} onValueChange={(v) => setFormRole(v as AppRole)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="garzon">Garzón</SelectItem>
+                  <SelectItem value="jefe_local">Jefe de Local</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setDialogOpen(false)} className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground">
+              Cancelar
+            </button>
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded-lg gradient-primary text-primary-foreground text-sm font-medium disabled:opacity-50">
+              {saving ? "Guardando..." : "Guardar"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
