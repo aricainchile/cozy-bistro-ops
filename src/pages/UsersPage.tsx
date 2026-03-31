@@ -126,10 +126,17 @@ const UsersPage = () => {
 
   const handleDelete = async (user: UserRow) => {
     if (!confirm(`¿Eliminar a ${user.full_name || user.email}?`)) return;
-    // Remove role (profile stays as it's managed by auth trigger)
-    await supabase.from("user_roles").delete().eq("user_id", user.id);
-    toast({ title: "Rol de usuario eliminado" });
-    fetchUsers();
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("manage-user", {
+        body: { action: "delete", user_id: user.id },
+      });
+      if (fnError) throw fnError;
+      if (fnData?.error) throw new Error(fnData.error);
+      toast({ title: "Usuario eliminado" });
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
   };
 
   return (
