@@ -103,22 +103,18 @@ const UsersPage = () => {
         }
         toast({ title: "Usuario actualizado" });
       } else {
-        // Create new user via signUp
+        // Create new user via edge function (doesn't affect current session)
         if (!formEmail || !formPassword) {
           toast({ title: "Email y contraseña son requeridos", variant: "destructive" });
           setSaving(false);
           return;
         }
-        const { data, error } = await supabase.auth.signUp({
-          email: formEmail,
-          password: formPassword,
-          options: { data: { full_name: formName } },
+        const { data: fnData, error: fnError } = await supabase.functions.invoke("manage-user", {
+          body: { action: "create", email: formEmail, password: formPassword, full_name: formName, role: formRole },
         });
-        if (error) throw error;
-        if (data.user) {
-          await supabase.from("user_roles").insert({ user_id: data.user.id, role: formRole });
-        }
-        toast({ title: "Usuario creado", description: "Debe confirmar su email para iniciar sesión" });
+        if (fnError) throw fnError;
+        if (fnData?.error) throw new Error(fnData.error);
+        toast({ title: "Usuario creado exitosamente" });
       }
       setDialogOpen(false);
       fetchUsers();
@@ -130,10 +126,17 @@ const UsersPage = () => {
 
   const handleDelete = async (user: UserRow) => {
     if (!confirm(`¿Eliminar a ${user.full_name || user.email}?`)) return;
-    // Remove role (profile stays as it's managed by auth trigger)
-    await supabase.from("user_roles").delete().eq("user_id", user.id);
-    toast({ title: "Rol de usuario eliminado" });
-    fetchUsers();
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("manage-user", {
+        body: { action: "delete", user_id: user.id },
+      });
+      if (fnError) throw fnError;
+      if (fnData?.error) throw new Error(fnData.error);
+      toast({ title: "Usuario eliminado" });
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
   };
 
   return (
